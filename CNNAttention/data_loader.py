@@ -40,6 +40,7 @@ class BatchGenerator(object):
         self.ori_data = json.load(open(file_name, "r"))
         self.rel2id = json.load(open(rel2id_file_name))
         word_vec = json.load(open(word_vec_file_name))
+        self.word_vec_mat = np.zeros((len(self.word_dict), len(self.word_dict[0])), dtype=np.float32)
         self.idx = 0
         self.instance_vec = []
         self.pos1 = []
@@ -64,10 +65,15 @@ class BatchGenerator(object):
         self.pos2 = [self._cal_distance(instance, pos="tail") for instance in self.ori_data]
 
         # Package an instance of the same relationship
-        self.bag_data, self.label = self._scope(self.ori_data)
+        self.bag_data, self.label, self.bag_pos1, self.bag_pos2 = self._scope(self.ori_data)
         self.out_order = self.bag_data.keys()
         if self.shuffle:
             random.shuffle(self.out_order)
+
+    def _word_vec_mat(self):
+#        self.word_vec_mat = np.zeros((len(self.word_dict), len(self.word_dict[0])), dtype=np.float32)
+        for cur_id, word in enumerate(self.word_dict):
+            self.word_vec_mat[cur_id, :] = self.word_dict[word["word"]]
 
     def __iter__(self):
         return self
@@ -90,21 +96,31 @@ class BatchGenerator(object):
         self.idx = idx1
         bag = []
         label = []
+        pos1 = []
+        pos2 = []
         for i in range(idx0, idx1):
             bag.append(self.bag_data[self.out_order[i]])
             label.append(self.label[self.out_order[i]])
+            pos1.append(self.pos1[self.out_order[i]])
+            pos2.append(self.pos2[self.out_order[i]])
         # If not enough for batch_size,fill it with 0
         for i in range(batch_size - (idx1-idx0)):
             bag.append(np.zeros((1, self.max_length), dtype=np.int32))
             label.append(0)
+            pos1.append(np.zeros((1, self.max_length), dtype=np.int32))
+            pos2.append(np.zeros((1, self.max_length), dtype=np.int32))
 #        batch_data["instances"] = np.concatenate(bag)
         batch_data["instances"] = bag
         batch_data["labels"] = label
+        batch_data["pos1"] = pos1
+        batch_data["pos2"] = pos2
         return batch_data
 
     def _scope(self, instance):
 #        bag_rel_vec = OrderedDict()
         bag_rel_vec = {}
+        bag_pos1_vec = {}
+        bag_pos2_vec = {}
         label = []
         start = 0
         end = 0
@@ -115,11 +131,13 @@ class BatchGenerator(object):
                 relid = self.rel2id[x["relation"]] if x["relation"] in self.rel2id else self.rel2id["NA"]
 #                bag_rel_vec[relid] = [self.instance_vec[i] for i in range(start, end)]
                 bag_rel_vec[len(label)] = [self.instance_vec[i] for i in range(start, end)]
+                bag_pos1_vec[len(label)] = [self.pos1[i] for i in range(start, end)]
+                bag_pos2_vec[len(label)] = [self.pos2[i] for i in range(start, end)]
                 label.append(relid)
                 start = idx
                 last_key = key
             end = idx
-        return bag_rel_vec, label
+        return bag_rel_vec, label, bag_pos1_vec, bag_pos2_vec
 
     def _cal_distance(self, instance, pos="head"):
         # Avoid situations where the target entity is part of another word
