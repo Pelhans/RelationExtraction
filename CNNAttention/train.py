@@ -13,15 +13,23 @@ args = parser.parse_args()
 def train():
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
-    batch_gen = BatchGenerator("../data/mini/train.json", "../data/mini/word_vec.json", "../data/mini/rel2id.json", 0)
+    batch_loader = BatchGenerator("../data/mini/train.json", "../data/mini/word_vec.json", "../data/mini/rel2id.json", 0)
     with tf.Session(config=config) as sess:
         with tf.variable_scope("inputs"):
-            x_inputs = tf.placeholder(tf.float32, shape=[None, None, args.max_length], name="x_input")
-            y_inputs = tf.placeholder(tf.float32, shape=[None], name="y_inputs")
+            word = tf.placeholder(dtype=tf.int32, shape=[None, max_length], name="word")
+            pos1 = tf.placeholder(dtype=tf.int32, shape=[None, max_length], name="pos1")
+            pos2 = tf.placeholder(dtype=tf.int32, shape=[None, max_length], name="pos2")
+            label = tf.placeholder(dtype=tf.int32, shape=[batch_size], name="label")
+            ins_label=tf.placeholder(dtype=tf.int32, shape=[None], name="ins_label")
+            length = tf.placeholder(dtype=tf.int32, shape=[None], name="length")
+            scope = tf.placeholder(dtype=tf.int32, shape=[batch_size, 2], name="scope")
+            train_data_loader = batch_loader
+            rel_tot = batch_loader.rel_tot
+            word_vec_mat = batch_loader.word_vec_mat
 
         with tf.variable_scope(args.model, reuse=None):
             model = Model()
-            model.cnn_att(x_inputs, y_inputs, batch_gen.word_vec_mat)
+            model.cnn_att()
 
 if __name__ == "__main__":
     train()
