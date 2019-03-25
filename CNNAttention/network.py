@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 # coding=utf-8
 import tensorflow as tf
+import numpy as np
 
 class Model(object):
-    def __init__(self, batch_loader):
+    def __init__(self, batch_loader, args):
+        self.args = args
         self.batch_loader = batch_loader
         self.lr = tf.placeholder(tf.float32, [])
         self.batch_size = tf.placeholder(tf.int32, [])
         
-    def cnn_att(self, max_length=120, keep_prob=1.0):
-        max_length = 120
-        pos_embedding_dim = 5
+    def cnn_att(self, keep_prob=1.0):
+        max_length = self.args.max_length
+        batch_size = self.args.batch_size
+        batch_loader = self.batch_loader
+        pos_embedding_dim = self.args.pos_embedding_dim
         kernel_size = 3
         stride_size = 1
         with tf.variable_scope("inputs"):
@@ -26,8 +30,8 @@ class Model(object):
             self.word_vec_mat = batch_loader.word_vec_mat
 
         with tf.variable_scope("word_embedding"):
-            word_embedding = tf.get_variable("word_embedding", initializer=word_vec_mat, dtype=tf.float32)
-            x_embedding = tf.nn.embedding_lookup(word_embedding, self.x_inputs)
+            word_embedding = tf.get_variable("word_embedding", initializer=self.word_vec_mat, dtype=tf.float32)
+            x_embedding = tf.nn.embedding_lookup(word_embedding, self.word)
         
         with tf.variable_scope("pos_embedding"):
             pos1_embedding = tf.get_variable("pos1_embedding", [max_length*2, pos_embedding_dim], dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
@@ -49,26 +53,27 @@ class Model(object):
             x = self.__dropout__(x, keep_prob=0.5)
             bag_repre = []
             with tf.variable_scope("logit"):
-                relation_matrix = tf.get_variable("relation_matrix", shape=[self.rel_tot, x.shape[1]], dtyp=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
-                bias = tf.get_variable("bias", shape[self.rel_tot], dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
+                relation_matrix = tf.get_variable("relation_matrix", shape=[self.rel_tot, x.shape[1]], dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
+                bias = tf.get_variable("bias", shape=[self.rel_tot], dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
                 current_relation = tf.nn.embedding_lookup(relation_matrix, self.ins_label)
                 attention_logit = tf.reduce_sum(current_relation*x, -1)
-            for i in range(scope.shape[0]):
+            for i in range(self.scope.shape[0]):
                 bag_hidden_mat = x[self.scope[i][0]:self.scope[i][1]]
                 attention_score = tf.nn.softmax(attention_logit[self.scope[i][0]:self.scope[i][1]], -1)
                 bag_repre.append(tf.squeeze(tf.matmul(tf.expand_dims(attention_score, 0), bag_hidden_mat)))
             bag_repre = tf.stack(bag_repre)
             bag_repre = self.__dropout__(bag_repre, keep_prob)
-            _train_logit = self.__logit__(bag_repre, self.rel_tot)
+            _train_logit = self.__logit__(bag_repre, self.rel_tot, var_scope="att")
 
         with tf.variable_scope("loss"):
             weights = tf.nn.embedding_lookup(self._get_weights(), self.label)
             label_one_hot = tf.one_hot(indices=self.label, depth=self.rel_tot, dtype=tf.int32)
             loss = tf.losses.softmax_cross_entropy(onehot_labels=label_one_hot, logits=_train_logit, weights=1.0)
             tf.summary.scalar("loss", loss)
+        return loss, _train_logit
 
 
-    def __logit__(x, rel_tot, var_scope=None):
+    def __logit__(self, x, rel_tot, var_scope=None):
         with tf.variable_scope(var_scope):
             relation_matrix = tf.get_variable('relation_matrix', shape=[rel_tot, x.shape[1]], dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
             bias = tf.get_variable('bias', shape=[rel_tot], dtype=tf.float32,initializer=tf.contrib.layers.xavier_initializer())
