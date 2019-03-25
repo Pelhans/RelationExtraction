@@ -9,6 +9,17 @@ class Model(object):
         self.batch_loader = batch_loader
         self.lr = tf.placeholder(tf.float32, [])
         self.batch_size = tf.placeholder(tf.int32, [])
+        with tf.variable_scope("inputs"):
+            self.word = tf.placeholder(dtype=tf.int32, shape=[None, self.args.max_length], name="word")
+            self.pos1 = tf.placeholder(dtype=tf.int32, shape=[None, self.args.max_length], name="pos1")
+            self.pos2 = tf.placeholder(dtype=tf.int32, shape=[None, self.args.max_length], name="pos2")
+            self.label = tf.placeholder(dtype=tf.int32, shape=[self.args.batch_size], name="label")
+            self.ins_label = tf.placeholder(dtype=tf.int32, shape=[None], name="ins_label")
+            self.length = tf.placeholder(dtype=tf.int32, shape=[None], name="length")
+            self.scope = tf.placeholder(dtype=tf.int32, shape=[self.args.batch_size, 2], name="scope")
+            self.train_data_loader = batch_loader
+            self.rel_tot = batch_loader.rel_tot
+            self.word_vec_mat = batch_loader.word_vec_mat
         
     def cnn_att(self, keep_prob=1.0):
         max_length = self.args.max_length
@@ -17,17 +28,17 @@ class Model(object):
         pos_embedding_dim = self.args.pos_embedding_dim
         kernel_size = 3
         stride_size = 1
-        with tf.variable_scope("inputs"):
-            self.word = tf.placeholder(dtype=tf.int32, shape=[None, max_length], name="word")
-            self.pos1 = tf.placeholder(dtype=tf.int32, shape=[None, max_length], name="pos1")
-            self.pos2 = tf.placeholder(dtype=tf.int32, shape=[None, max_length], name="pos2")
-            self.label = tf.placeholder(dtype=tf.int32, shape=[batch_size], name="label")
-            self.ins_label = tf.placeholder(dtype=tf.int32, shape=[None], name="ins_label")
-            self.length = tf.placeholder(dtype=tf.int32, shape=[None], name="length")
-            self.scope = tf.placeholder(dtype=tf.int32, shape=[batch_size, 2], name="scope")
-            self.train_data_loader = batch_loader
-            self.rel_tot = batch_loader.rel_tot
-            self.word_vec_mat = batch_loader.word_vec_mat
+#        with tf.variable_scope("inputs"):
+#            self.word = tf.placeholder(dtype=tf.int32, shape=[None, max_length], name="word")
+#            self.pos1 = tf.placeholder(dtype=tf.int32, shape=[None, max_length], name="pos1")
+#            self.pos2 = tf.placeholder(dtype=tf.int32, shape=[None, max_length], name="pos2")
+#            self.label = tf.placeholder(dtype=tf.int32, shape=[batch_size], name="label")
+#            self.ins_label = tf.placeholder(dtype=tf.int32, shape=[None], name="ins_label")
+#            self.length = tf.placeholder(dtype=tf.int32, shape=[None], name="length")
+#            self.scope = tf.placeholder(dtype=tf.int32, shape=[batch_size, 2], name="scope")
+#            self.train_data_loader = batch_loader
+#            self.rel_tot = batch_loader.rel_tot
+#            self.word_vec_mat = batch_loader.word_vec_mat
 
         with tf.variable_scope("word_embedding"):
             word_embedding = tf.get_variable("word_embedding", initializer=self.word_vec_mat, dtype=tf.float32)
@@ -52,13 +63,17 @@ class Model(object):
         with tf.variable_scope("attention"):
             x = self.__dropout__(x, keep_prob=0.5)
             bag_repre = []
-            with tf.variable_scope("logit"):
+            with tf.variable_scope("logit", reuse=tf.AUTO_REUSE):
                 relation_matrix = tf.get_variable("relation_matrix", shape=[self.rel_tot, x.shape[1]], dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
                 bias = tf.get_variable("bias", shape=[self.rel_tot], dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
                 current_relation = tf.nn.embedding_lookup(relation_matrix, self.ins_label)
                 attention_logit = tf.reduce_sum(current_relation*x, -1)
+                print "#"*20,   "attention_logit: ", tf.nn.softmax(attention_logit[self.scope[1][0]:self.scope[1][1]], -1)
+                print "#"*20, self.scope
             for i in range(self.scope.shape[0]):
                 bag_hidden_mat = x[self.scope[i][0]:self.scope[i][1]]
+                print "i: "*20, i, self.scope[i][0], self.scope[i][1]
+#                attention_score = tf.nn.softmax(attention_logit[self.scope[i][0]:self.scope[i][1]], -1)
                 attention_score = tf.nn.softmax(attention_logit[self.scope[i][0]:self.scope[i][1]], -1)
                 bag_repre.append(tf.squeeze(tf.matmul(tf.expand_dims(attention_score, 0), bag_hidden_mat)))
             bag_repre = tf.stack(bag_repre)
@@ -100,7 +115,7 @@ class Model(object):
             print("Calculating weights_table...")
             _weights_table = np.zeros((self.rel_tot), dtype=np.float32)
             for i in range(len(self.batch_loader.data_rel)):
-                _weights_table[self.data_loader.data_rel[i]] += 1.0
+                _weights_table[self.batch_loader.data_rel[i]] += 1.0
             _weights_table = 1 / (_weights_table ** 0.05)
             weights_table = tf.get_variable(name='weights_table', dtype=tf.float32, trainable=False, initializer=_weights_table)
             print("Finish calculating")

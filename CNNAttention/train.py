@@ -5,6 +5,8 @@ import argparse
 from network import Model
 from data_loader import BatchGenerator
 import time
+import numpy as np
+import sys, os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model', type=str, default='cnn_att')
@@ -28,9 +30,9 @@ def train():
             model = Model(batch_loader, args)
             _loss, train_logit = model.cnn_att()
             grads = optimizer.compute_gradients(_loss)
+            train_op = optimizer.apply_gradients(grads)
             tf.add_to_collection("loss", _loss)
             tf.add_to_collection("train_logit", train_logit)
-            train_op = optimizer.apply_gradients(grads)
             summary_writer = tf.summary.FileWriter(args.summary_dir, sess.graph)
             saver = tf.train.Saver(max_to_keep=None)
             sess.run(tf.global_variables_initializer())
@@ -52,17 +54,19 @@ def train():
                 time_start = time.time()
                 feed_dict = {}
                 batch_data = batch_loader.next_batch(args.batch_size)
-                batch_label = batch_data["rel"]
+#                print "batch_data['word']: ", batch_data["word"]
+                iter_label = batch_data["rel"]
                 feed_dict.update({
                     model.word : batch_data["word"],
                     model.pos1: batch_data["pos1"],
                     model.pos2 : batch_data["pos2"],
-                    model.label : batch_data["label"],
+                    model.label : batch_data["rel"],
                     model.ins_label: batch_data["ins_rel"],
                     model.scope : batch_data["scope"],
                     model.length : batch_data["length"]
                 })
-                iter_loss, iter_logit, train_op, iter_label = sess.run([loss, train_logit, train_op], feed_dict)
+#                print "#" * 20, "type: ", type(_loss), type(train_logit), type(train_op)
+                iter_loss, iter_logit, _train_op = sess.run([_loss, train_logit, train_op], feed_dict)
                 t = time.time() - time_start
                 time_sum += t
                 iter_output = iter_logit.argmax(-1)

@@ -41,6 +41,8 @@ class BatchGenerator(object):
         self.rel2id = json.load(open(rel2id_file_name))
         self.rel_tot = len(self.rel2id)
         word_vec = json.load(open(word_vec_file_name))
+        self.instance_tot = len(self.ori_data)
+        self.data_rel = np.zeros((self.instance_tot), dtype=np.int32)
         self.idx = 0
         self.instance_vec = []
         self.pos1 = []
@@ -59,6 +61,7 @@ class BatchGenerator(object):
         # Convert each instance into vector
         for idx, instance in enumerate(self.ori_data):
             words = instance["sentence"].strip().split()
+            self.data_rel[idx] = self.rel2id[instance["relation"]] if instance["relation"] in self.rel2id else self.rel2id["NA"]
             vecs = [self.word2id[w] if w in self.word2id else self.word2id["UNK"]  for w in words ]
             self._length.append(len(vecs))
             vecs = self._padding(vecs)
@@ -125,13 +128,17 @@ class BatchGenerator(object):
             length.append(np.zeros((1), dtype=np.int32))
             scope.append([last_scope, last_scope+1])
             last_scope += 1
-        batch_data["word"] = bag
-        batch_data["rel"] = label
-        batch_data["pos1"] = pos1
-        batch_data["pos2"] = pos2
-        batch_data["ins_rel"] = _ins_label
-        batch_data["length"] = length
-        batch_data["scope"] = scope
+#        print "bag: ", bag
+#        print "label: ", label
+#        print "pos1: ", pos1
+#        print "np.stack(scope): ", np.stack(scope)
+        batch_data["word"] = np.concatenate(bag)
+        batch_data["rel"] = np.stack(label)
+        batch_data["pos1"] = np.concatenate(pos1)
+        batch_data["pos2"] = np.concatenate(pos2)
+        batch_data["ins_rel"] = np.concatenate(_ins_label)
+        batch_data["length"] = np.concatenate(length)
+        batch_data["scope"] = np.stack(scope)
         return batch_data
 
     def _scope(self, instance):
@@ -142,23 +149,22 @@ class BatchGenerator(object):
         _length = []
         label = []
         scope = []
-        start = 0
-        end = 0
+        start = -1
         last_key = ""
         for idx, x in enumerate(instance):
             key = x["head"]["word"] + "#" + x["tail"]["word"] + "#" + x["relation"]
             if last_key != key:
-                relid = self.rel2id[x["relation"]] if x["relation"] in self.rel2id else self.rel2id["NA"]
-#                bag_rel_vec[relid] = [self.instance_vec[i] for i in range(start, end)]
-                bag_rel_vec[len(label)] = [self.instance_vec[i] for i in range(start, end)]
-                bag_pos1_vec[len(label)] = [self.pos1[i] for i in range(start, end)]
-                bag_pos2_vec[len(label)] = [self.pos2[i] for i in range(start, end)]
-                label.append(relid)
-                _length.append([self._length[i] for i in range(start, end)])
-                scope.append([start, end])
+                if last_key != "":
+                    relid = self.rel2id[x["relation"]] if x["relation"] in self.rel2id else self.rel2id["NA"]
+    #                bag_rel_vec[relid] = [self.instance_vec[i] for i in range(start, idx)]
+                    bag_rel_vec[len(label)] = [self.instance_vec[i] for i in range(start, idx)]
+                    bag_pos1_vec[len(label)] = [self.pos1[i] for i in range(start, idx)]
+                    bag_pos2_vec[len(label)] = [self.pos2[i] for i in range(start, idx)]
+                    label.append(relid)
+                    _length.append([self._length[i] for i in range(start, idx)])
+                    scope.append([start, idx])
                 start = idx
                 last_key = key
-            end = idx
         return bag_rel_vec, label, bag_pos1_vec, bag_pos2_vec, _length, scope
 
     def _cal_distance(self, instance, pos="head"):
