@@ -12,12 +12,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--model', type=str, default='cnn_att')
 parser.add_argument('--max_length', type=int, default=120)
 parser.add_argument('--pos_embedding_dim', type=int, default=5)
+parser.add_argument('--sentence_dim', type=int, default=230)
 parser.add_argument('--lr', type=float, default=0.5)
 parser.add_argument('--batch_size', type=int, default=2)
 parser.add_argument('--max_epoch', type=int, default=60)
+parser.add_argument('--save_epoch', type=int, default=10)
 parser.add_argument('--test_epoch', type=int, default=1)
 parser.add_argument('--summary_dir', type=str, default="./summary")
-parser.add_argument('--checkpoint', type=str, default='./checkpoint')
+parser.add_argument('--ckpt_dir', type=str, default='./checkpoint')
 args = parser.parse_args()
 
 def train():
@@ -28,7 +30,7 @@ def train():
     with tf.Session(config=config) as sess:
         with tf.variable_scope(args.model):
             model = Model(batch_loader, args)
-            _loss, train_logit = model.cnn_att()
+            _loss, train_logit, att_logit = model.cnn_att()
             grads = optimizer.compute_gradients(_loss)
             train_op = optimizer.apply_gradients(grads)
             tf.add_to_collection("loss", _loss)
@@ -53,9 +55,11 @@ def train():
             while True:
                 time_start = time.time()
                 feed_dict = {}
-                batch_data = batch_loader.next_batch(args.batch_size)
-#                print "batch_data['word']: ", batch_data["word"]
-                iter_label = batch_data["rel"]
+                try:
+                    batch_data = batch_loader.next_batch(args.batch_size)
+                    iter_label = batch_data["rel"]
+                except StopIteration:
+                    break
                 feed_dict.update({
                     model.word : batch_data["word"],
                     model.pos1: batch_data["pos1"],
@@ -63,10 +67,10 @@ def train():
                     model.label : batch_data["rel"],
                     model.ins_label: batch_data["ins_rel"],
                     model.scope : batch_data["scope"],
-                    model.length : batch_data["length"]
+                    model.length : batch_data["length"],
                 })
-#                print "#" * 20, "type: ", type(_loss), type(train_logit), type(train_op)
-                iter_loss, iter_logit, _train_op = sess.run([_loss, train_logit, train_op], feed_dict)
+                _att_logit= sess.run([att_logit], feed_dict)
+                iter_loss, iter_logit, _train_op ,_att_logit= sess.run([_loss, train_logit, train_op, att_logit], feed_dict)
                 t = time.time() - time_start
                 time_sum += t
                 iter_output = iter_logit.argmax(-1)
@@ -77,14 +81,14 @@ def train():
                 tot += iter_label.shape[0]
                 tot_not_na += (iter_label != 0).sum()
                 if tot_not_na > 0:
-                    sys.stdout.write("epoch %d step %d time %.2f | loss: %f, not NA accuracy: %f, accuracy: %f\r" % (epoch, i, t, iter_loss, float(tot_not_na_correct) / tot_not_na, float(tot_correct) / tot)) 
+                    print("epoch %d step %d time %.2f | loss: %f, not NA accuracy: %f, accuracy: %f\r" % (epoch, i, t, iter_loss, float(tot_not_na_correct) / tot_not_na, float(tot_correct) / tot)) 
                     sys.stdout.flush()
                 i += 1
             print("\nAverage iteration time: %f" % (time_sum / i))
 
-            if (epoch + 1)% save_epoch == 0:
-                if not os.path.isdir(ckpt_dir):
-                    os.mkdir(ckpt_dir)
+            if (epoch + 1)% args.save_epoch == 0:
+                if not os.path.isdir(args.ckpt_dir):
+                    os.mkdir(args.ckpt_dir)
                 path = saver.save(sess, os.path.join(args.ckpt_dir, args.model))
                 print("Finish storing in {}".format(path))
 

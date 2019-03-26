@@ -56,7 +56,7 @@ class BatchGenerator(object):
         self.word_dict["BLANK"] = len(word_vec) + 1
         self.word2id = {w : i for i,w in enumerate(self.word_dict)}
         self.ori_data.sort(key=lambda x: x["head"]["word"] + "#" + x["tail"]["word"] + "#" + x["relation"])
-        self.word_vec_mat = np.zeros((len(self.word_dict), len(self.word_dict.keys()[0])), dtype=np.float32)
+        self.word_vec_mat = np.zeros((len(self.word_dict), len(self.word_dict[self.word_dict.keys()[0]])), dtype=np.float32)
 
         # Convert each instance into vector
         for idx, instance in enumerate(self.ori_data):
@@ -108,6 +108,7 @@ class BatchGenerator(object):
         _ins_label = []
         scope = []
         length = []
+        cur_pos = 0
         for i in range(idx0, idx1):
             bag.append(self.bag_data[self.out_order[i]])
             label.append(self.label[self.out_order[i]])
@@ -116,7 +117,10 @@ class BatchGenerator(object):
             pos2.append(self.bag_pos2[self.out_order[i]])
             _ins_label.append([self.label[self.out_order[i]]]*len(self.bag_data[self.out_order[i]]))
             length.append(self.length[self.out_order[i]])
-            scope.append(self.scope[self.out_order[i]])
+#            scope.append(self.scope[self.out_order[i]])
+            # Scope stores the relative position in this batch
+            scope.append([cur_pos, cur_pos+batch_size])
+            cur_pos += len(self.bag_data[self.out_order[i]])
         # If not enough for batch_size,fill it with 0
         last_scope = scope[-1][-1]
         for i in range(batch_size - (idx1-idx0)):
@@ -126,12 +130,10 @@ class BatchGenerator(object):
             pos2.append(np.zeros((1, self.max_length), dtype=np.int32))
             _ins_label.append(np.zeros((1), dtype=np.int32))
             length.append(np.zeros((1), dtype=np.int32))
-            scope.append([last_scope, last_scope+1])
+#            scope.append([last_scope, last_scope+1])
+            scope.append([cur_pos, cur_pos+1])
+            cur_pos += 1
             last_scope += 1
-#        print "bag: ", bag
-#        print "label: ", label
-#        print "pos1: ", pos1
-#        print "np.stack(scope): ", np.stack(scope)
         batch_data["word"] = np.concatenate(bag)
         batch_data["rel"] = np.stack(label)
         batch_data["pos1"] = np.concatenate(pos1)
