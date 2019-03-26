@@ -190,7 +190,7 @@ class BatchGenerator(object):
                 pos = idx
                 char_pos = -1
             tmp_p += len(w) + 1
-        pos = max_length - 1 if pos > self.max_length else pos
+        pos = self.max_length - 1 if pos > self.max_length else pos
         words = self._padding(words, content="BLANK")
         distance_vec = [pos-i+self.max_length for i in range(len(words))]
         return distance_vec

@@ -71,7 +71,7 @@ class Model(object):
             label_one_hot = tf.one_hot(indices=self.label, depth=self.rel_tot, dtype=tf.int32)
             loss = tf.losses.softmax_cross_entropy(onehot_labels=label_one_hot, logits=_train_logit, weights=1.0)
             tf.summary.scalar("loss", loss)
-        return loss, _train_logit, attention_logit[self.scope[i][0]:self.scope[i][1]]
+        return loss, _train_logit
 
 
     def __logit__(self, x, rel_tot, var_scope=None):

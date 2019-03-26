@@ -13,11 +13,14 @@ parser.add_argument('--model', type=str, default='cnn_att')
 parser.add_argument('--max_length', type=int, default=120)
 parser.add_argument('--pos_embedding_dim', type=int, default=5)
 parser.add_argument('--sentence_dim', type=int, default=230)
-parser.add_argument('--lr', type=float, default=0.5)
-parser.add_argument('--batch_size', type=int, default=2)
+parser.add_argument('--lr', type=float, default=1)
+parser.add_argument('--batch_size', type=int, default=200)
 parser.add_argument('--max_epoch', type=int, default=60)
 parser.add_argument('--save_epoch', type=int, default=10)
-parser.add_argument('--test_epoch', type=int, default=1)
+parser.add_argument('--test_epoch', type=int, default=0.9)
+parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/train.json')
+parser.add_argument('--word2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/word_vec.json')
+parser.add_argument('--rel2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/rel2id.json')
 parser.add_argument('--summary_dir', type=str, default="./summary")
 parser.add_argument('--ckpt_dir', type=str, default='./checkpoint')
 args = parser.parse_args()
@@ -26,11 +29,11 @@ def train():
     config = tf.ConfigProto(allow_soft_placement=True)
     config.gpu_options.allow_growth = True
     optimizer = tf.train.GradientDescentOptimizer(args.lr)
-    batch_loader = BatchGenerator("../data/mini/train.json", "../data/mini/word_vec.json", "../data/mini/rel2id.json", 0)
+    batch_loader = BatchGenerator(args.train_file, args.word2id_file, args.rel2id_file, "train")
     with tf.Session(config=config) as sess:
         with tf.variable_scope(args.model):
             model = Model(batch_loader, args)
-            _loss, train_logit, att_logit = model.cnn_att()
+            _loss, train_logit = model.cnn_att()
             grads = optimizer.compute_gradients(_loss)
             train_op = optimizer.apply_gradients(grads)
             tf.add_to_collection("loss", _loss)
@@ -69,8 +72,7 @@ def train():
                     model.scope : batch_data["scope"],
                     model.length : batch_data["length"],
                 })
-                _att_logit= sess.run([att_logit], feed_dict)
-                iter_loss, iter_logit, _train_op ,_att_logit= sess.run([_loss, train_logit, train_op, att_logit], feed_dict)
+                iter_loss, iter_logit, _train_op = sess.run([_loss, train_logit, train_op], feed_dict)
                 t = time.time() - time_start
                 time_sum += t
                 iter_output = iter_logit.argmax(-1)
@@ -81,7 +83,7 @@ def train():
                 tot += iter_label.shape[0]
                 tot_not_na += (iter_label != 0).sum()
                 if tot_not_na > 0:
-                    print("epoch %d step %d time %.2f | loss: %f, not NA accuracy: %f, accuracy: %f\r" % (epoch, i, t, iter_loss, float(tot_not_na_correct) / tot_not_na, float(tot_correct) / tot)) 
+                    sys.stdout.write("epoch %d step %d time %.2f | loss: %f, not NA accuracy: %f, accuracy: %f\r" % (epoch, i, t, iter_loss, float(tot_not_na_correct) / tot_not_na, float(tot_correct) / tot)) 
                     sys.stdout.flush()
                 i += 1
             print("\nAverage iteration time: %f" % (time_sum / i))
