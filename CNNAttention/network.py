@@ -107,4 +107,21 @@ class Model(object):
             print("Finish calculating")
         return weights_table
 
+    def run(self, batch_data, model,sess=None, run_list=[], mode="train"):
+        feed_dict = {}
+        feed_dict.update({
+            model.word : batch_data["word"],
+            model.pos1: batch_data["pos1"],
+            model.pos2 : batch_data["pos2"],
+            model.label : batch_data["rel"],
+            model.ins_label: batch_data["ins_rel"],
+            model.scope : batch_data["scope"],
+            model.length : batch_data["length"],
+        })
+        if mode == "train":
+            iter_loss, iter_logit, _train_op = sess.run(run_list, feed_dict)
+            return iter_loss, iter_logit, _train_op
+        elif mode == "test":
+            iter_logit = sess.run(run_list, feed_dict)[0]
+            return iter_logit
 

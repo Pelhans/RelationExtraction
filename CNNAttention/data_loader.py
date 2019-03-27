@@ -33,7 +33,8 @@ class BatchGenerator(object):
             #*IMPORTANT: make sure the id of NA is 0.
     """
 
-    def __init__(self, file_name, word_vec_file_name, rel2id_file_name, mode, max_length=120, batch_size=160, shuffle=True):
+    def __init__(self, file_name, word_vec_file_name, rel2id_file_name, mode="train", max_length=120, batch_size=160, shuffle=True):
+        self.mode = mode
         self.max_length = max_length
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -44,11 +45,13 @@ class BatchGenerator(object):
         self.instance_tot = len(self.ori_data)
         self.data_rel = np.zeros((self.instance_tot), dtype=np.int32)
         self.idx = 0
+        self.relfact_tot = 0
         self.instance_vec = []
         self.pos1 = []
         self.pos2 = []
         self.bag_data = []
         self._length = []
+        self.entpair = []
         
         # Build word dicttionary
         self.word_dict = {w["word"] : w["vec"] for w in word_vec}
@@ -72,7 +75,7 @@ class BatchGenerator(object):
         self.pos2 = [self._cal_distance(instance, pos="tail") for instance in self.ori_data]
 
         # Package an instance of the same relationship
-        self.bag_data, self.label, self.bag_pos1, self.bag_pos2, self.length, self.scope = self._scope(self.ori_data)
+        self.bag_data, self.label, self.bag_pos1, self.bag_pos2, self.length, self.scope, self.entpair = self._scope(self.ori_data)
         self.out_order = self.bag_data.keys()
         if self.shuffle:
             random.shuffle(self.out_order)
@@ -108,6 +111,8 @@ class BatchGenerator(object):
         _ins_label = []
         scope = []
         length = []
+        _multi_rel = []
+        _entpair = []
         cur_pos = 0
         for i in range(idx0, idx1):
             bag.append(self.bag_data[self.out_order[i]])
@@ -122,6 +127,13 @@ class BatchGenerator(object):
             bag_size = len(self.bag_data[self.out_order[i]])
             scope.append([cur_pos, cur_pos+bag_size])
             cur_pos += bag_size
+            if self.mode == "test":
+                _one_multi_rel = np.zeros((self.rel_tot), dtype=np.int32)
+                iter_scope = self.scope[self.out_order[i]]
+                for j in range(iter_scope[0], iter_scope[1]):
+                    _one_multi_rel[self.data_rel[j]] = 1
+                _multi_rel.append(_one_multi_rel)
+                _entpair.append(self.entpair[self.out_order[i]])
         # If not enough for batch_size,fill it with 0
         last_scope = scope[-1][-1]
         for i in range(batch_size - (idx1-idx0)):
@@ -135,6 +147,9 @@ class BatchGenerator(object):
             scope.append([cur_pos, cur_pos+1])
             cur_pos += 1
             last_scope += 1
+            if self.mode == "test":
+                _multi_rel.append(np.zeros((self.rel_tot), dtype=np.int32))
+                _entpair.append("None#None")
         batch_data["word"] = np.concatenate(bag)
         batch_data["rel"] = np.stack(label)
         batch_data["pos1"] = np.concatenate(pos1)
@@ -142,6 +157,9 @@ class BatchGenerator(object):
         batch_data["ins_rel"] = np.concatenate(_ins_label)
         batch_data["length"] = np.concatenate(length)
         batch_data["scope"] = np.stack(scope)
+        if self.mode == "test":
+            batch_data["multi_rel"] = np.stack(_multi_rel)
+            batch_data["entpair"] = _entpair
         return batch_data
 
     def _scope(self, instance):
@@ -152,10 +170,14 @@ class BatchGenerator(object):
         _length = []
         label = []
         scope = []
+        ent_bag = []
         start = -1
         last_key = ""
         for idx, x in enumerate(instance):
-            key = x["head"]["word"] + "#" + x["tail"]["word"] + "#" + x["relation"]
+            if self.mode == "train":
+                key = x["head"]["word"] + "#" + x["tail"]["word"] + "#" + x["relation"]
+            elif self.mode == "test":
+                key = x["head"]["word"] + "#" + x["tail"]["word"]
             if last_key != key:
                 if last_key != "":
                     relid = self.rel2id[x["relation"]] if x["relation"] in self.rel2id else self.rel2id["NA"]
@@ -166,9 +188,12 @@ class BatchGenerator(object):
                     label.append(relid)
                     _length.append([self._length[i] for i in range(start, idx)])
                     scope.append([start, idx])
+                    ent_bag.append(key)
+                    if x["relation"] != "NA":
+                        self.relfact_tot += 1
                 start = idx
                 last_key = key
-        return bag_rel_vec, label, bag_pos1_vec, bag_pos2_vec, _length, scope
+        return bag_rel_vec, label, bag_pos1_vec, bag_pos2_vec, _length, scope, ent_bag
 
     def _cal_distance(self, instance, pos="head"):
         # Avoid situations where the target entity is part of another word
