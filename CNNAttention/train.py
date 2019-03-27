@@ -15,7 +15,7 @@ parser.add_argument('--pos_embedding_dim', type=int, default=5)
 parser.add_argument('--sentence_dim', type=int, default=230)
 parser.add_argument('--lr', type=float, default=1)
 parser.add_argument('--batch_size', type=int, default=200)
-parser.add_argument('--max_epoch', type=int, default=60)
+parser.add_argument('--max_epoch', type=int, default=200)
 parser.add_argument('--save_epoch', type=int, default=10)
 parser.add_argument('--test_epoch', type=int, default=0.9)
 parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/train.json')
@@ -29,7 +29,7 @@ def train():
     config = tf.ConfigProto(allow_soft_placement=True)
     config.gpu_options.allow_growth = True
     optimizer = tf.train.GradientDescentOptimizer(args.lr)
-    batch_loader = BatchGenerator(args.train_file, args.word2id_file, args.rel2id_file, "train")
+    batch_loader = BatchGenerator(args.train_file, args.word2id_file, args.rel2id_file, "train", batch_size=args.batch_size)
     with tf.Session(config=config) as sess:
         with tf.variable_scope(args.model):
             model = Model(batch_loader, args)

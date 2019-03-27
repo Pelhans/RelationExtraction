@@ -33,7 +33,7 @@ class BatchGenerator(object):
             #*IMPORTANT: make sure the id of NA is 0.
     """
 
-    def __init__(self, file_name, word_vec_file_name, rel2id_file_name, mode, max_length=120, batch_size=1, shuffle=True):
+    def __init__(self, file_name, word_vec_file_name, rel2id_file_name, mode, max_length=120, batch_size=160, shuffle=True):
         self.max_length = max_length
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -119,8 +119,9 @@ class BatchGenerator(object):
             length.append(self.length[self.out_order[i]])
 #            scope.append(self.scope[self.out_order[i]])
             # Scope stores the relative position in this batch
-            scope.append([cur_pos, cur_pos+batch_size])
-            cur_pos += len(self.bag_data[self.out_order[i]])
+            bag_size = len(self.bag_data[self.out_order[i]])
+            scope.append([cur_pos, cur_pos+bag_size])
+            cur_pos += bag_size
         # If not enough for batch_size,fill it with 0
         last_scope = scope[-1][-1]
         for i in range(batch_size - (idx1-idx0)):
@@ -208,7 +209,7 @@ class BatchGenerator(object):
 
 
 if __name__ == "__main__":
-    batch = BatchGenerator("../data/mini/train.json", "../data/mini/word_vec.json", "../data/mini/rel2id.json", 0)
-    batch.next_batch(2)
-    batch.next_batch(2)
-    batch.next_batch(2)
+    batch = BatchGenerator("../data/mini/train.json", "../data/mini/word_vec.json", "../data/mini/rel2id.json", 0, batch_size=1)
+    print batch.next_batch(1)
+    batch.next_batch(1)
+    batch.next_batch(1)
