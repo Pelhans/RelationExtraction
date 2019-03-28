@@ -174,18 +174,19 @@ class BatchGenerator(object):
         start = -1
         last_key = ""
         for idx, x in enumerate(instance):
+            key = ""
             if self.mode == "train":
                 key = x["head"]["word"] + "#" + x["tail"]["word"] + "#" + x["relation"]
             elif self.mode == "test":
                 key = x["head"]["word"] + "#" + x["tail"]["word"]
             if last_key != key:
                 if last_key != "":
-                    relid = self.rel2id[x["relation"]] if x["relation"] in self.rel2id else self.rel2id["NA"]
-    #                bag_rel_vec[relid] = [self.instance_vec[i] for i in range(start, idx)]
+#                    relid = self.rel2id[x["relation"]] if x["relation"] in self.rel2id else self.rel2id["NA"]
+    #               bag_rel_vec[relid] = [self.instance_vec[i] for i in range(start, idx)]
                     bag_rel_vec[len(label)] = [self.instance_vec[i] for i in range(start, idx)]
                     bag_pos1_vec[len(label)] = [self.pos1[i] for i in range(start, idx)]
                     bag_pos2_vec[len(label)] = [self.pos2[i] for i in range(start, idx)]
-                    label.append(relid)
+                    label.append(self.data_rel[start])
                     _length.append([self._length[i] for i in range(start, idx)])
                     scope.append([start, idx])
                     ent_bag.append(key)
@@ -234,7 +235,7 @@ class BatchGenerator(object):
 
 
 if __name__ == "__main__":
-    batch = BatchGenerator("../data/mini/train.json", "../data/mini/word_vec.json", "../data/mini/rel2id.json", 0, batch_size=1)
+    batch = BatchGenerator("../data/mini/test.json", "../data/mini/word_vec.json", "../data/mini/rel2id.json", mode="test", batch_size=1)
     print batch.next_batch(1)
-    batch.next_batch(1)
-    batch.next_batch(1)
+    print batch.next_batch(1)
+    print batch.next_batch(1)

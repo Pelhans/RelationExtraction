@@ -14,11 +14,11 @@ parser.add_argument('--model', type=str, default='cnn_att')
 parser.add_argument('--max_length', type=int, default=120)
 parser.add_argument('--pos_embedding_dim', type=int, default=5)
 parser.add_argument('--sentence_dim', type=int, default=230)
-parser.add_argument('--lr', type=float, default=1.5)
-parser.add_argument('--batch_size', type=int, default=256)
+parser.add_argument('--lr', type=float, default=0.9)
+parser.add_argument('--batch_size', type=int, default=512)
 parser.add_argument('--max_epoch', type=int, default=200)
 parser.add_argument('--save_epoch', type=int, default=10)
-parser.add_argument('--test_epoch', type=int, default=10)
+parser.add_argument('--test_epoch', type=int, default=5)
 parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/train.json')
 parser.add_argument('--test_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/test.json')
 parser.add_argument('--word2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/word_vec.json')
@@ -130,15 +130,16 @@ class Run(object):
             tot_not_na_correct += iter_not_na_correct
             tot += test_data['rel'].shape[0]
             tot_not_na += (test_data['rel'] != 0).sum()
-            if tot_not_na > 0:
-                sys.stdout.write("&&&&&&[TEST] not NA accuracy: %f, accuracy: %f\r"% (float(tot_not_na_correct) / tot_not_na, float(tot_correct) / tot))
-                sys.stdout.flush()
+#            if tot_not_na > 0:
+#                sys.stdout.write("&&&&&&[TEST] not NA accuracy: %f, accuracy: %f\r"% (float(tot_not_na_correct) / tot_not_na, float(tot_correct) / tot))
+#                sys.stdout.flush()
             for idx in range(len(iter_logit)):
                 for rel in range(1, test_loader.rel_tot):
                     test_result.append({'score': iter_logit[idx][rel], 'flag':test_data['multi_rel'][idx][rel]})
                     if test_data['entpair'][idx] != "None#None":
                         pred_result.append({'score': float(iter_logit[idx][rel]),'entpair': test_data['entpair'][idx].encode('utf-8'), 'relation': rel})
                 entpair_tot += 1
+        print("&&&&&&[TEST] not NA accuracy: %f, accuracy: %f\r"% (float(tot_not_na_correct) / tot_not_na, float(tot_correct) / tot))
         sorted_test_result = sorted(test_result, key=lambda x: x['score'])
         prec = []
         recall = []
@@ -147,6 +148,8 @@ class Run(object):
             correct += item['flag']
             prec.append(float(correct) / (i + 1))
             recall.append(float(correct) / test_loader.relfact_tot)
+        print "test_loader.relfact_tot: ", test_loader.relfact_tot, "#"*20
+        print "correct: ", correct, "#"*20
         auc = sklearn.metrics.auc(x=recall, y=prec)
         print("\n[TEST] auc: {}".format(auc))
         print("Finish testing")
