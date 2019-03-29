@@ -55,8 +55,9 @@ class BatchGenerator(object):
         
         # Build word dicttionary
         self.word_dict = {w["word"] : w["vec"] for w in word_vec}
-        self.word_dict["UNK"] = len(word_vec)
-        self.word_dict["BLANK"] = len(word_vec) + 1
+        self.word_dict["UNK"] = np.ones((len(self.word_dict[self.word_dict.keys()[0]])), dtype=np.float32)
+        self.word_dict["BLANK"] = np.ones((len(self.word_dict[self.word_dict.keys()[0]])), dtype=np.float32)
+#        self.word_dict["BLANK"] = np.ones((len(word_vec)), dtype=np.float32)
         self.word2id = {w : i for i,w in enumerate(self.word_dict)}
         self.ori_data.sort(key=lambda x: x["head"]["word"] + "#" + x["tail"]["word"] + "#" + x["relation"])
         self.word_vec_mat = np.zeros((len(self.word_dict), len(self.word_dict[self.word_dict.keys()[0]])), dtype=np.float32)
@@ -67,7 +68,7 @@ class BatchGenerator(object):
             self.data_rel[idx] = self.rel2id[instance["relation"]] if instance["relation"] in self.rel2id else self.rel2id["NA"]
             vecs = [self.word2id[w] if w in self.word2id else self.word2id["UNK"]  for w in words ]
             self._length.append(len(vecs))
-            vecs = self._padding(vecs)
+            vecs = self._padding(vecs, content=self.word2id["BLANK"])
             self.instance_vec.append(vecs)
 
         # Calculate the distance of a word from an entity
@@ -121,6 +122,7 @@ class BatchGenerator(object):
             pos1.append(self.bag_pos1[self.out_order[i]])
             pos2.append(self.bag_pos2[self.out_order[i]])
             _ins_label.append([self.label[self.out_order[i]]]*len(self.bag_data[self.out_order[i]]))
+#            _ins_label.append(self.data_rel[start:idx])
             length.append(self.length[self.out_order[i]])
 #            scope.append(self.scope[self.out_order[i]])
             # Scope stores the relative position in this batch
@@ -173,6 +175,8 @@ class BatchGenerator(object):
         ent_bag = []
         start = -1
         last_key = ""
+        last_relfact = ""
+        last_relfact_pos = -1
         for idx, x in enumerate(instance):
             key = ""
             if self.mode == "train":
@@ -189,11 +193,19 @@ class BatchGenerator(object):
                     label.append(self.data_rel[start])
                     _length.append([self._length[i] for i in range(start, idx)])
                     scope.append([start, idx])
-                    ent_bag.append(key)
-                    if x["relation"] != "NA":
-                        self.relfact_tot += 1
+                    tmp_ins = instance[start]
+                    tmp_ent = tmp_ins["head"]["word"] + "#" + tmp_ins["tail"]["word"]
+                    ent_bag.append(tmp_ent)
                 start = idx
                 last_key = key
+            relfact = x["head"]["word"] + "#" + x["tail"]["word"] + "#" + x["relation"]
+            if last_relfact != relfact:
+                if last_relfact != "":
+                    if instance[last_relfact_pos]["relation"] != "NA":
+                        self.relfact_tot += 1
+                last_relfact_pos = idx
+                last_relfact = relfact
+        print "self.relfact_tot: ", self.relfact_tot
         return bag_rel_vec, label, bag_pos1_vec, bag_pos2_vec, _length, scope, ent_bag
 
     def _cal_distance(self, instance, pos="head"):
@@ -236,6 +248,7 @@ class BatchGenerator(object):
 
 if __name__ == "__main__":
     batch = BatchGenerator("../data/mini/test.json", "../data/mini/word_vec.json", "../data/mini/rel2id.json", mode="test", batch_size=1)
+#    batch = BatchGenerator("../../OpenNRE/data/nyt/test.json", "../../OpenNRE/data/nyt/word_vec.json", "../../OpenNRE/data/nyt/rel2id.json", mode="test", batch_size=1)
     print batch.next_batch(1)
-    print batch.next_batch(1)
-    print batch.next_batch(1)
+#    print batch.next_batch(1)
+#    print batch.next_batch(1)

@@ -50,7 +50,7 @@ class Model(object):
 #            x = self.__dropout__(x, keep_prob=0.5)
 
         with tf.variable_scope("attention"):
-            x = self.__dropout__(x, keep_prob=0.5)
+            x = self.__dropout__(x, keep_prob=keep_prob)
             bag_repre = []
             with tf.variable_scope("logit", reuse=tf.AUTO_REUSE):
                 relation_matrix = tf.get_variable("relation_matrix", shape=[self.rel_tot, x.shape[1]], dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())

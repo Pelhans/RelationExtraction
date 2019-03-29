@@ -15,20 +15,20 @@ parser.add_argument('--max_length', type=int, default=120)
 parser.add_argument('--pos_embedding_dim', type=int, default=5)
 parser.add_argument('--sentence_dim', type=int, default=230)
 parser.add_argument('--lr', type=float, default=0.9)
-parser.add_argument('--batch_size', type=int, default=512)
-parser.add_argument('--max_epoch', type=int, default=200)
-parser.add_argument('--save_epoch', type=int, default=10)
+parser.add_argument('--batch_size', type=int, default=2)
+parser.add_argument('--max_epoch', type=int, default=10)
+parser.add_argument('--save_epoch', type=int, default=5)
 parser.add_argument('--test_epoch', type=int, default=5)
-parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/train.json')
-parser.add_argument('--test_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/test.json')
-parser.add_argument('--word2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/word_vec.json')
-parser.add_argument('--rel2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/rel2id.json')
-#parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/train.json')
-#parser.add_argument('--test_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/test.json')
-#parser.add_argument('--word2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/word_vec.json')
-#parser.add_argument('--rel2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/rel2id.json')
+#parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/train.json')
+#parser.add_argument('--test_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/test.json')
+#parser.add_argument('--word2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/word_vec.json')
+#parser.add_argument('--rel2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/rel2id.json')
+parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/train.json')
+parser.add_argument('--test_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/test.json')
+parser.add_argument('--word2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/word_vec.json')
+parser.add_argument('--rel2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/rel2id.json')
 parser.add_argument('--summary_dir', type=str, default="./summary")
-parser.add_argument('--ckpt_dir', type=str, default='./checkpoint')
+parser.add_argument('--ckpt_dir', type=str, default='./checkpoint/')
 args = parser.parse_args()
 
 
@@ -41,7 +41,7 @@ class Run(object):
         self.sess = tf.Session(config=config)
         with tf.variable_scope(args.model):
             self.model = Model(self.batch_loader, args)
-            self._loss, self.train_logit = self.model.cnn_att()
+            self._loss, self.train_logit = self.model.cnn_att(keep_prob=0.5)
             grads = optimizer.compute_gradients(self._loss)
             self.train_op = optimizer.apply_gradients(grads)
             tf.add_to_collection("loss", self._loss)
@@ -104,6 +104,13 @@ class Run(object):
         self.sess.close()
 
     def test(self, test_loader, model, sess, ckpt=None):
+#        if sess == None:
+        sess = tf.Session()
+        model = Model(self.batch_loader, args)
+        _, logit = model.cnn_att(keep_prob=1.0)
+        sess.run(tf.global_variables_initializer())
+        saver = tf.train.import_meta_graph(args.ckpt_dir+args.model + ".meta")
+        saver.restore(sess, tf.train.latest_checkpoint(args.ckpt_dir))
         tot_correct = 0
         tot_not_na_correct = 0
         tot = 0
@@ -120,7 +127,7 @@ class Run(object):
                 iter_label = test_data["rel"]
             except StopIteration:
                 break
-            iter_logit = model.run(test_data, model, sess, run_list=[self.train_logit], mode="test")
+            iter_logit = model.run(test_data, model, sess, run_list=[logit], mode="test")
             t = time.time() - time_start
             time_sum += t
             iter_output = iter_logit.argmax(-1)
