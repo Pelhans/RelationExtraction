@@ -14,19 +14,19 @@ parser.add_argument('--model', type=str, default='cnn_att')
 parser.add_argument('--max_length', type=int, default=120)
 parser.add_argument('--pos_embedding_dim', type=int, default=5)
 parser.add_argument('--sentence_dim', type=int, default=230)
-parser.add_argument('--lr', type=float, default=0.9)
-parser.add_argument('--batch_size', type=int, default=2)
-parser.add_argument('--max_epoch', type=int, default=10)
-parser.add_argument('--save_epoch', type=int, default=5)
-parser.add_argument('--test_epoch', type=int, default=5)
-#parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/train.json')
-#parser.add_argument('--test_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/test.json')
-#parser.add_argument('--word2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/word_vec.json')
-#parser.add_argument('--rel2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/rel2id.json')
-parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/train.json')
-parser.add_argument('--test_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/test.json')
-parser.add_argument('--word2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/word_vec.json')
-parser.add_argument('--rel2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/rel2id.json')
+parser.add_argument('--lr', type=float, default=0.5)
+parser.add_argument('--batch_size', type=int, default=160)
+parser.add_argument('--max_epoch', type=int, default=100)
+parser.add_argument('--save_epoch', type=int, default=2)
+parser.add_argument('--test_epoch', type=int, default=2)
+parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/train.json')
+parser.add_argument('--test_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/test.json')
+parser.add_argument('--word2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/word_vec.json')
+parser.add_argument('--rel2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/nyt/rel2id.json')
+#parser.add_argument('--train_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/train.json')
+#parser.add_argument('--test_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/test.json')
+#parser.add_argument('--word2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/word_vec.json')
+#parser.add_argument('--rel2id_file', type=str, default='/media/nlp/data/project/OpenNRE/data/mini/rel2id.json')
 parser.add_argument('--summary_dir', type=str, default="./summary")
 parser.add_argument('--ckpt_dir', type=str, default='./checkpoint/')
 args = parser.parse_args()
@@ -39,19 +39,23 @@ class Run(object):
         optimizer = tf.train.GradientDescentOptimizer(args.lr)
         self.batch_loader = batch_loader
         self.sess = tf.Session(config=config)
-        with tf.variable_scope(args.model):
-            self.model = Model(self.batch_loader, args)
-            self._loss, self.train_logit = self.model.cnn_att(keep_prob=0.5)
-            grads = optimizer.compute_gradients(self._loss)
+        with tf.variable_scope(args.model, reuse=tf.AUTO_REUSE):
+            self.model = Model(self.batch_loader, args, keep_prob=0.5)
+#            self._loss, self.train_logit = self.model.cnn_att(keep_prob=0.5)
+            self.model.cnn_att()
+            self.model.training=False
+            self.test_logit = self.model.logit
+            self.model.training = True
+            grads = optimizer.compute_gradients(self.model.loss)
             self.train_op = optimizer.apply_gradients(grads)
-            tf.add_to_collection("loss", self._loss)
-            tf.add_to_collection("train_logit", self.train_logit)
+            tf.add_to_collection("loss", self.model.loss)
+            tf.add_to_collection("train_logit", self.model.logit)
             summary_writer = tf.summary.FileWriter(args.summary_dir, self.sess.graph)
             self.saver = tf.train.Saver(max_to_keep=None)
             self.sess.run(tf.global_variables_initializer())
 
     def train(self):
-        test_loader = BatchGenerator(args.test_file, args.word2id_file, args.rel2id_file, mode="test", batch_size=args.batch_size)
+        test_loader = BatchGenerator(args.test_file, args.word2id_file, args.rel2id_file, mode="test", batch_size=args.batch_size, shuffle=False)
         best_metric = 0
         best_prec = None
         best_recall = None
@@ -66,13 +70,12 @@ class Run(object):
             time_sum = 0
             while True:
                 time_start = time.time()
-                feed_dict = {}
                 try:
                     batch_data = self.batch_loader.next_batch(args.batch_size)
                     iter_label = batch_data["rel"]
                 except StopIteration:
                     break
-                iter_loss, iter_logit, _train_op = self.model.run(batch_data, self.model, self.sess, run_list=[self._loss, self.train_logit, self.train_op], mode="train")
+                iter_loss, iter_logit, _train_op = self.model.run(batch_data, self.model, self.sess, run_list=[self.model.loss, self.model.logit, self.train_op], mode="train")
                 t = time.time() - time_start
                 time_sum += t
                 iter_output = iter_logit.argmax(-1)
@@ -96,21 +99,14 @@ class Run(object):
 
             if (epoch + 1)% args.test_epoch == 0:
                 self.test(test_loader, self.model, self.sess)
-            if (epoch + 1)% args.save_epoch == 0:
-                if not os.path.isdir(args.ckpt_dir):
-                    os.mkdir(args.ckpt_dir)
-                path = self.saver.save(self.sess, os.path.join(args.ckpt_dir, args.model))
-                print("Finish storing in {}".format(path))
+#            if (epoch + 1)% args.save_epoch == 0:
+#                if not os.path.isdir(args.ckpt_dir):
+#                    os.mkdir(args.ckpt_dir)
+#                path = self.saver.save(self.sess, os.path.join(args.ckpt_dir, args.model))
+#                print("Finish storing in {}".format(path))
         self.sess.close()
 
     def test(self, test_loader, model, sess, ckpt=None):
-#        if sess == None:
-        sess = tf.Session()
-        model = Model(self.batch_loader, args)
-        _, logit = model.cnn_att(keep_prob=1.0)
-        sess.run(tf.global_variables_initializer())
-        saver = tf.train.import_meta_graph(args.ckpt_dir+args.model + ".meta")
-        saver.restore(sess, tf.train.latest_checkpoint(args.ckpt_dir))
         tot_correct = 0
         tot_not_na_correct = 0
         tot = 0
@@ -121,13 +117,12 @@ class Run(object):
         pred_result = []
         while True:
             time_start = time.time()
-            feed_dict = {}
             try:
                 test_data = test_loader.next_batch(args.batch_size)
                 iter_label = test_data["rel"]
             except StopIteration:
                 break
-            iter_logit = model.run(test_data, model, sess, run_list=[logit], mode="test")
+            iter_logit = model.run(test_data, model, sess, run_list=[self.test_logit], mode="test")
             t = time.time() - time_start
             time_sum += t
             iter_output = iter_logit.argmax(-1)
@@ -137,9 +132,6 @@ class Run(object):
             tot_not_na_correct += iter_not_na_correct
             tot += test_data['rel'].shape[0]
             tot_not_na += (test_data['rel'] != 0).sum()
-#            if tot_not_na > 0:
-#                sys.stdout.write("&&&&&&[TEST] not NA accuracy: %f, accuracy: %f\r"% (float(tot_not_na_correct) / tot_not_na, float(tot_correct) / tot))
-#                sys.stdout.flush()
             for idx in range(len(iter_logit)):
                 for rel in range(1, test_loader.rel_tot):
                     test_result.append({'score': iter_logit[idx][rel], 'flag':test_data['multi_rel'][idx][rel]})
@@ -155,8 +147,6 @@ class Run(object):
             correct += item['flag']
             prec.append(float(correct) / (i + 1))
             recall.append(float(correct) / test_loader.relfact_tot)
-        print "test_loader.relfact_tot: ", test_loader.relfact_tot, "#"*20
-        print "correct: ", correct, "#"*20
         auc = sklearn.metrics.auc(x=recall, y=prec)
         print("\n[TEST] auc: {}".format(auc))
         print("Finish testing")

@@ -1,2 +1,4 @@
 data/mini/*.json
 *.pyc
+CNNAttention/checkpoint/*
+CNNAttention/summary/*

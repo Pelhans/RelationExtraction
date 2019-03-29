@@ -180,9 +180,9 @@ class BatchGenerator(object):
         for idx, x in enumerate(instance):
             key = ""
             if self.mode == "train":
-                key = x["head"]["word"] + "#" + x["tail"]["word"] + "#" + x["relation"]
+                key = x["head"]["id"] + "#" + x["tail"]["id"] + "#" + x["relation"]
             elif self.mode == "test":
-                key = x["head"]["word"] + "#" + x["tail"]["word"]
+                key = x["head"]["id"] + "#" + x["tail"]["id"]
             if last_key != key:
                 if last_key != "":
 #                    relid = self.rel2id[x["relation"]] if x["relation"] in self.rel2id else self.rel2id["NA"]
@@ -198,7 +198,7 @@ class BatchGenerator(object):
                     ent_bag.append(tmp_ent)
                 start = idx
                 last_key = key
-            relfact = x["head"]["word"] + "#" + x["tail"]["word"] + "#" + x["relation"]
+            relfact = x["head"]["id"] + "#" + x["tail"]["id"] + "#" + x["relation"]
             if last_relfact != relfact:
                 if last_relfact != "":
                     if instance[last_relfact_pos]["relation"] != "NA":
